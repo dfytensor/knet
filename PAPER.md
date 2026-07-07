@@ -216,3 +216,6 @@ vanilla ppl=76.15/top1=0.2966; ARC(SGR, matched) ppl=75.65/top1=0.2974 (持平, 噪
 ARC(SGR, ?3.4% 参数) ppl=77.26 (更差)。**SGR 既无质量收益也无效率收益**。
 结论: 论文"秩是复杂度货币"作为描述(grokking 秩塌缩)成立, 但**不能转成更好的 LLM 架构**——
 描述性洞察 ≠ 处方性设计。
+### 架构横向对比 (5 架构, 同 LM 数据/指标)
+seq=256, 1000 步, 参数 ~17M, val ppl: **gla(GLA+dense)=104.26 ??** > gla_sgr=105.50 > sgr=112.08 > vanilla=113.71 > moe=115.88。
+**注意力类型决定排序(GLA > softmax 8.3%); FFN 变体(SGR/MoE/dense)≈不影响**。ARC-LLM 的 SGR 不是优胜架构——纯 GLA+dense 更好。
