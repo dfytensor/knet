@@ -1,0 +1,11 @@
+# 大文件 - 不入库
+*.pth
+*.pt
+*.bin
+*.safetensors
+open_ash_voc_agent.json
+vocabulary_nnn.json
+__pycache__/
+*.pyc
+.cache/
+jieba.cache
