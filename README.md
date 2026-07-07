@@ -25,8 +25,9 @@
 src/           FRSMASH v3.6 模型 + open_ash_voc 分词器(自包含)
 experiments/   exp1 K_int 测量 / exp2 原版K-Net(MLP) / exp3 FRSMASH Grokking+5种governor
 data/          全部 CSV 实验日志
-figures/       6 张分析图
+figures/       分析图
 docs/          RESULTS.md, IMPROVEMENT.md
+experiments/exp4_arc_llm/  基于论文设计的新框架 ARC-LLM (SGR+CLR)，结论：CLR 有效、SGR 在 grokking 上无收益
 ```
 
 ## 复现
