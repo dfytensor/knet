@@ -204,3 +204,9 @@ knet/
 详见 `experiments/exp4_arc_llm/RESULTS.md`。SGR 是否在真实 LM（token 难度差异大）上有用，**已测**：在 minimind pretrain (15M 参数, 1200 步) 上,
 SGR 门控与 token 惊讶度的 Pearson r=+0.10 (modular addition 上 ≈0)——**方向性正确, 真实文本确有弱路由**;
 但门控全程 ~0.9(默认全秩), val ppl 无收益(105.7 vs vanilla 104.4)。结论: 信号弱、低秩路径不够竞争力, SGR 仍中性偏负。
+
+### CLR 边界: 真实 LM 预训练上无效 (负面结果)
+将 CLR 搬到 minimind 预训练(15M transformer, 1200 步, 解耦 wd 公平对比):
+fixed wd ppl=104.20, cosine ppl=103.49(边际最优), **clr ppl=104.97(略差)**。
+CLR 的 λ 全程退化到≈0.1(均值 0.097), 闭环几乎未起作用——因为 LM 预训练的 train/val gap
+太弱(+0.07~0.09)不足以驱动闭环。**CLR 的优势局限于 grokking 类(强 gap)任务, 不能外推到通用 LM 训练。**
