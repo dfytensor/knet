@@ -219,3 +219,9 @@ ARC(SGR, ?3.4% 参数) ppl=77.26 (更差)。**SGR 既无质量收益也无效率收益**。
 ### 架构横向对比 (5 架构, 同 LM 数据/指标)
 seq=256, 1000 步, 参数 ~17M, val ppl: **gla(GLA+dense)=104.26 ??** > gla_sgr=105.50 > sgr=112.08 > vanilla=113.71 > moe=115.88。
 **注意力类型决定排序(GLA > softmax 8.3%); FFN 变体(SGR/MoE/dense)≈不影响**。ARC-LLM 的 SGR 不是优胜架构——纯 GLA+dense 更好。
+### 架构效率基准 (算力/速度/长程依赖)
+ppl 打平时的分水岭:
+- **吞吐**: GLA 286k/1127k(train/inf tok/s) vs SGR 176k/556k vs vanilla 181k/598k。GLA 快 1.6-2× 且省显存(7.9 vs 9.0GB); **SGR 比 dense 还慢(低秩路每次都算,纯开销)**。
+- **序列 scaling**: seq4096 时 GLA 29ms/3GB vs softmax 295ms/8.5GB —— **GLA 快 10×、省 2.8× 显存**(O(T) vs O(T2),差距随长度放大)。
+- **长上下文质量**: 训练@512 推到@2048, GLA ppl 退化 +19% vs softmax +36%(GLA 退化减半, 每长度都更优)。
+- 结论: **真正决定算力/速度/长程的是注意力类型(GLA), 不是 FFN 变体(SGR)**。SGR 在效率轴同样判负。
