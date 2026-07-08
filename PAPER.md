@@ -222,3 +222,12 @@ PAPER.md                     本论文
 ```
 
 复现见各 exp 目录的脚本。数据缓存(`*.pt`、`open_ash_voc_agent.json`)与权重(`*.pth`)不入库。
+
+
+## 15. CLR-wd 应用到 FRSMASH v3.6 与 GLA：不提升
+
+作为 wd 调度直接套到 FRSMASH(60M) 和 GLA(17M)：
+- FRSMASH：fixed ppl **49.33** vs CLR ppl 50.27（CLR 略差 1.9%）
+- GLA：fixed ppl **81.21** vs CLR ppl 81.42（持平）
+
+CLR 的 λ 在退场（0.01→0.0086/0.0034）——LM 的 train/val gap 太弱触发不了闭环。**与骨干架构无关，根因是标准 LM 预训练没有强 gap 信号。** CLR 阀门原则只在“有强 gap + 有语义旋钮”时（grokking 的 wd、SGR 的路由 frac）有用；LM 预训练两者皆无，故空转。详见 experiments/exp4_arc_llm/CLR_APPLY_RESULT.md。
