@@ -328,3 +328,8 @@ seq512/1500步: vanilla ppl **37.10** vs StateMoE 37.38(+0.8% 噪声); seq1024/8
 ## 26. Dense State-MoE(全强度10×状态): 诊断正确但 state 非瓶颈
 
 dense 版每专家看全序列+门控混合, 状态范数 1770(远超 vanilla 1052, masked版 56)——输入饥饿被修好。但 ppl 37.66 vs vanilla 36.99, 反略差 1.8%。即便 10×全强度状态也不提升 => **state 容量不是 FRSMASH 瓶颈**。masked版败于技术错(饥饿, 可修), dense版做对了但根本无用(非瓶颈)。状态容量只在超长上下文(8k+) 才可能变瓶颈, 本设置测不到。详见 experiments/exp5_frsmash_hybrid/DENSE_STATEMOE_RESULT.md。
+
+
+## 27. 超长上下文(seq4096)验证: dense State-MoE 终于赢(state 是长程瓶颈)
+
+用梯度累计(micro_bs=1,accum=8) 在 seq4096 验证: vanilla ppl 82.36 vs **dense State-MoE(10×全强度状态) ppl 81.17(+1.4%胜)**。对照 seq512（dense 37.66 vs vanilla 36.99, -1.8%输）=> **state 容量是上下文长度相关的瓶颈**: 短上下文非瓶颈(10×冗余), 超长上下文变瓶颈(10×有用)。dense 的 Δppl 更小(trunc1024 ppl 81.32 < vanilla全4096 82.36)=> dense 状态更高效。代价 36% 速度(10× SlowMemory 递归)。诊断闭环: masked版饥饿(loop10) → dense修好(loop26) → seq512非瓶颈(loop26) → **seq4096变瓶颈并胜(本节)**。详见 experiments/exp5_frsmash_hybrid/LONGCTX_STATEMOE_RESULT.md。
