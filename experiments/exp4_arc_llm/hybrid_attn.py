@@ -32,25 +32,26 @@ class LocalSoftmax(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self,d,h,attn_t,d_ffn,W=128):
+    def __init__(self,d,h,attn_t,d_ffn,W=128,wins=None):
         super().__init__(); self.n1=nn.LayerNorm(d); self.n2=nn.LayerNorm(d)
-        self.ffn=DenseFFN(d,d_ffn)
-        if attn_t=='softmax': self.attn=SoftmaxAttn(d,h); self.hybrid=False
-        elif attn_t=='gla': self.attn=GlaAttn(d,h); self.hybrid=False
-        else:
-            self.attn_local=LocalSoftmax(d,h,W); self.attn_gla=GlaAttn(d,h); self.hybrid=True
+        self.ffn=DenseFFN(d,d_ffn); self.attn_t=attn_t
+        if attn_t=='softmax': self.attn=SoftmaxAttn(d,h); self.mode='single'
+        elif attn_t=='gla': self.attn=GlaAttn(d,h); self.mode='single'
+        elif attn_t=='hybrid': self.attn_local=LocalSoftmax(d,h,W); self.attn_gla=GlaAttn(d,h); self.mode='hybrid'
+        else:  # multi: 多尺度窗口 + GLA
+            ws = wins or [64,256,1024]
+            self.attn_locals=nn.ModuleList([LocalSoftmax(d,h,w) for w in ws]); self.attn_gla=GlaAttn(d,h); self.mode='multi'
     def forward(self,x):
-        if self.hybrid:
-            x=x+self.attn_local(self.n1(x))+self.attn_gla(self.n1(x))
-        else:
-            x=x+self.attn(self.n1(x))
-        f,_=self.ffn(self.n2(x))
-        return x+f
+        h1=self.n1(x)
+        if self.mode=='single': x=x+self.attn(h1)
+        elif self.mode=='hybrid': x=x+self.attn_local(h1)+self.attn_gla(h1)
+        else: x=x+sum(al(h1) for al in self.attn_locals)+self.attn_gla(h1)
+        f,_=self.ffn(self.n2(x)); return x+f
 
 class LM(nn.Module):
-    def __init__(self,attn_t,d=256,h=8,L=6,d_ffn=1024,W=128,max_len=2100):
+    def __init__(self,attn_t,d=256,h=8,L=6,d_ffn=1024,W=128,wins=None,max_len=2100):
         super().__init__(); self.em=nn.Embedding(VOCAB,d); self.pos=nn.Embedding(max_len,d)
-        self.blocks=nn.ModuleList([Block(d,h,attn_t,d_ffn,W) for _ in range(L)])
+        self.blocks=nn.ModuleList([Block(d,h,attn_t,d_ffn,W,wins) for _ in range(L)])
         self.norm=nn.LayerNorm(d); self.head=nn.Linear(d,VOCAB,bias=False)
     def forward(self,x):
         h=self.em(x)+self.pos(torch.arange(x.size(1),device=x.device))
@@ -64,11 +65,11 @@ class DS(Dataset):
     @staticmethod
     def collate(it): p=pad_sequence(it,batch_first=True,padding_value=0); return p[:,:-1],p[:,1:]
 
-def run(name,attn_t,steps=1000,seq=256,batch=32,lr=3e-4,wd=0.1,n_val=2000,W=128):
+def run(name,attn_t,steps=1000,seq=256,batch=32,lr=3e-4,wd=0.1,n_val=2000,W=128,wins=None):
     torch.manual_seed(0)
     data=torch.load(CACHE,weights_only=False); val_d,tr_d=data[:n_val],data[n_val:300000]
-    model=LM(attn_t,d=256,h=8,L=6,W=W,max_len=seq+8).to(DEV)
-    print(f'[{name}] attn={attn_t} seq={seq} W={W} params={sum(p.numel() for p in model.parameters()):,}',flush=True)
+    model=LM(attn_t,d=256,h=8,L=6,W=W,wins=wins,max_len=seq+8).to(DEV)
+    print(f'[{name}] attn={attn_t} seq={seq} W={W} wins={wins} params={sum(p.numel() for p in model.parameters()):,}',flush=True)
     opt=torch.optim.AdamW(model.parameters(),lr=lr,weight_decay=wd)
     tr=DataLoader(DS(tr_d,seq),batch_size=batch,shuffle=True,num_workers=0,collate_fn=DS.collate,drop_last=True)
     vloader=DataLoader(DS(val_d,seq),batch_size=batch,shuffle=False,num_workers=0,collate_fn=DS.collate)
@@ -94,8 +95,10 @@ def run(name,attn_t,steps=1000,seq=256,batch=32,lr=3e-4,wd=0.1,n_val=2000,W=128)
     return math.exp(vl)
 
 if __name__=='__main__':
-    ap=argparse.ArgumentParser(); ap.add_argument('--attn',default='hybrid',choices=['softmax','gla','hybrid'])
+    ap=argparse.ArgumentParser();     ap.add_argument('--attn',default='hybrid',choices=['softmax','gla','hybrid','multi'])
     ap.add_argument('--seq',type=int,default=256); ap.add_argument('--steps',type=int,default=1000)
     ap.add_argument('--W',type=int,default=128); ap.add_argument('--batch',type=int,default=32)
+    ap.add_argument('--wins',default=None, help='comma list for multi, e.g. 64,256,1024')
     a=ap.parse_args()
-    run(a.attn+'_'+str(a.seq), a.attn, steps=a.steps, seq=a.seq, batch=a.batch, W=a.W)
+    wins=[int(x) for x in a.wins.split(',')] if a.wins else None
+    run(a.attn+'_'+str(a.seq), a.attn, steps=a.steps, seq=a.seq, batch=a.batch, W=a.W, wins=wins)
