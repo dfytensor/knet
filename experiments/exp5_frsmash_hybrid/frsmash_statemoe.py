@@ -20,15 +20,24 @@ class StateMoESlow(nn.Module):
         probs=F.softmax(logits,-1)                               # (B,T,N) for aux
         out=torch.zeros_like(x_seq)
         new_states=[]
+        per_exp_out=[]   # 每专家输出(被 mask 后)的 L2 范数, 诊断用
         for e in range(N):
             m=(idx==e).unsqueeze(-1).to(x_seq.dtype)             # (B,T,1)
             inp_e=x_seq*m                                        # 该专家只见其路由 token
             y_e, h_e = self.experts[e](inp_e, h_states[e])
             new_states.append(h_e)
             out=out + y_e*m                                      # 只路由 token 读此专家
+            per_exp_out.append(float((y_e*m).norm().detach()))
         h_states=torch.stack(new_states, dim=0)                  # (N,B,D) 新张量, 无 in-place
         # 负载均衡 aux (GShard 式)
         self.last_aux = N * (probs.mean(dim=[0,1])**2).sum()
+        # 诊断
+        with torch.no_grad():
+            load=(idx.unsqueeze(-1)==torch.arange(N,device=x_seq.device)).float().mean(dim=[0,1])  # 每专家 token 比例
+            st_norms=h_states.flatten(1).norm(dim=1)             # 每专家状态范数 (N,)
+            self.diag={'load':load.cpu(), 'state_norm':st_norms.cpu(),
+                       'out_norm':torch.tensor(per_exp_out),
+                       'route_ent': float(-(probs.clamp(1e-9).log()*probs).sum(-1).mean())}  # 路由熵
         return out, h_states
 
 
