@@ -300,3 +300,11 @@ loop 5-6 证明 hybrid 的 O(T·W) 效率优势需融合 kernel。本轮写 Trit
 全 hybrid 速度 vs softmax: **seq2048 快 3.8×, seq4096 快 7.8×**(37ms/149ms → 10ms/19ms)。
 质量: hybrid(Triton) seq256 ppl 104.50 仍胜 GLA 104.83(tf32 侵蚀了 loop4 的 102.49 收益到 0.3 ppl 边际)。
 **loop 7 = 6 轮里第一个决定性、可部署的工程正收益**: 长上下文部署 hybrid = GLA 质量 + 比 softmax 快近 8×。是效率突破非质量革命。详见 experiments/exp4_arc_llm/NARRATIVE_LOOP7.md。
+
+
+## 23. Loop 8 最后一里: 真实长上下文验证 hybrid
+
+原生长序列(seq1024 连续流)训练三架构, 测长程收益 Δppl=ppl(仅末256)−ppl(全1024):
+GLA +2.07、**hybrid +2.47**(最会用长程)、softmax −1.51(小模型下不会用长程)。质量: GLA 107.37 ≈ hybrid 108.62(ppl 持平), 远胜 softmax 146.54。
+合并 loop7 速度: **长上下文 hybrid = GLA 质量 + 比 softmax 快近 8×**。hybrid 对 GLA 的质量优势在长上下文消失(持平), 但对 softmax 的优势(质量+速度)在长上下文最大。
+**完整 NIAH/LongBench 需更大+指令微调模型, 超单卡 4090 算力, 列 future work**; Δppl 是可行的长程代理度量。详见 experiments/exp4_arc_llm/NARRATIVE_LOOP8.md。
