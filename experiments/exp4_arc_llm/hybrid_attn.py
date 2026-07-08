@@ -3,13 +3,14 @@
   假设: 短上下文(seq256)混合 < GLA(借 softmax 精度); 长上下文(1024/2048)混合 ≈ GLA 且 << softmax.
 对照: pure softmax(O(T²)), pure GLA, hybrid(W=128).
 """
-import torch, torch.nn as nn, torch.nn.functional as F, math, os, sys, csv, time, argparse
+import torch, torch.nn as nn, torch.nn.functional as F, math, os, sys, csv, time, argparse, triton
 from torch.utils.data import Dataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence
 DEV='cuda'; OUT=os.path.dirname(os.path.abspath(__file__))
 CACHE=os.environ.get('KINT_CACHE', r'F:\OpenASH2605\train_60m\cache\pt_cache_openash_512_openash.pt')
 sys.path.insert(0, OUT)
 from arch_compare import SoftmaxAttn, GlaAttn, DenseFFN, VOCAB
+from triton_window_attn import window_attn as triton_window_attn
 
 
 class LocalSoftmax(nn.Module):
@@ -20,20 +21,14 @@ class LocalSoftmax(nn.Module):
         if self.fast: return self._chunked(x)
         return self._windowed(x)
     def _chunked(self,x):
-        B,T,d=x.shape; H,hd=self.h,self.hd; W=self.W; Bq=64; scale=1.0/math.sqrt(hd)
-        q=self.inner.q(x).view(B,T,H,hd).transpose(1,2); k=self.inner.k(x).view(B,T,H,hd).transpose(1,2); v=self.inner.v(x).view(B,T,H,hd).transpose(1,2)
-        out=torch.zeros_like(q)
-        for i in range(0,T,Bq):
-            qb=q[:,:,i:i+Bq]; n=qb.size(2)
-            j0=max(0,i+Bq-W); j1=min(T,i+Bq)                       # key 窗口 [j0,j1)
-            kw=k[:,:,j0:j1]; vw=v[:,:,j0:j1]
-            sc=(qb@kw.transpose(-1,-2))*scale                      # (B,H,n,j1-j0)
-            bi=torch.arange(n,device=x.device)[:,None]; bj=torch.arange(kw.size(2),device=x.device)[None,:]
-            qpos=i+bi; kpos=j0+bj
-            valid=(kpos<=qpos)&((qpos-kpos)<=W)
-            sc=sc.masked_fill(~valid,float('-inf'))
-            out[:,:,i:i+Bq]=(sc.softmax(-1)@vw)
-        return self.inner.o(out.transpose(1,2).reshape(B,T,d))
+        B,T,d=x.shape; H,hd=self.h,self.hd; W=self.W
+        q=self.inner.q(x).view(B,T,H,hd).transpose(1,2).contiguous()  # (B,H,T,hd)
+        k=self.inner.k(x).view(B,T,H,hd).transpose(1,2).contiguous()
+        v=self.inner.v(x).view(B,T,H,hd).transpose(1,2).contiguous()
+        WKV=min(triton.cdiv(W+64,64)*64+64, 512)   # 覆盖窗口+block, 钳到合理
+        WKV=min(max(WKV,128),512)
+        o=triton_window_attn(q,k,v,W,BQ=64,WKV=WKV)   # Triton O(T·W)
+        return self.inner.o(o.transpose(1,2).reshape(B,T,d))
     def _windowed(self,x):
         B,T,d=x.shape; H=self.inner.h; hd=self.inner.hd; W=self.W
         q=self.inner.q(x).view(B,T,H,hd).transpose(1,2); k=self.inner.k(x).view(B,T,H,hd).transpose(1,2); v=self.inner.v(x).view(B,T,H,hd).transpose(1,2)

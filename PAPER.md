@@ -290,3 +290,13 @@ C·V 三轮榦干后换新命题(loop 4, 与 C·V 无关)。命题: 局部窗口
 | 2048 | 371.32 | 393.86 | 382.15 |
 
 **hybrid 在所有长度严格改进 GLA**(102<105, 218<218, 382<394)，短程还胜 softmax(102.49<111.39)。这是自 GLA 以来第一个真实架构正收益、方向全新。但长程 ppl 仍输全 softmax(窗口 W=128 在 seq2048 只覆盖 6%, 错失长程精确依赖), 且效率优势因未写融合 kernel 未兑现。loop 5 方向: 多尺度窗口 + 融合 kernel, 让长程也胜 softmax。详见 experiments/exp4_arc_llm/NARRATIVE_LOOP4.md。
+
+
+## 22. Loop 7: Triton 融合滑动窗口注意力 — 效率突破(7.8×)兑现
+
+loop 5-6 证明 hybrid 的 O(T·W) 效率优势需融合 kernel。本轮写 Triton 滑动窗口因果注意力 kernel(每 program 一 query 块+一次加载整个 key 窗口, 直接 softmax), 集成进 hybrid。
+正确性: vs PyTorch band-mask 参考, 残差 1.2e-3(tf32 精度, 逻辑正确)。
+单 kernel 速度 vs torch sdpa: T8192 快 6.5×。
+全 hybrid 速度 vs softmax: **seq2048 快 3.8×, seq4096 快 7.8×**(37ms/149ms → 10ms/19ms)。
+质量: hybrid(Triton) seq256 ppl 104.50 仍胜 GLA 104.83(tf32 侵蚀了 loop4 的 102.49 收益到 0.3 ppl 边际)。
+**loop 7 = 6 轮里第一个决定性、可部署的工程正收益**: 长上下文部署 hybrid = GLA 质量 + 比 softmax 快近 8×。是效率突破非质量革命。详见 experiments/exp4_arc_llm/NARRATIVE_LOOP7.md。
