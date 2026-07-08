@@ -231,3 +231,18 @@ PAPER.md                     本论文
 - GLA：fixed ppl **81.21** vs CLR ppl 81.42（持平）
 
 CLR 的 λ 在退场（0.01→0.0086/0.0034）——LM 的 train/val gap 太弱触发不了闭环。**与骨干架构无关，根因是标准 LM 预训练没有强 gap 信号。** CLR 阀门原则只在“有强 gap + 有语义旋钮”时（grokking 的 wd、SGR 的路由 frac）有用；LM 预训练两者皆无，故空转。详见 experiments/exp4_arc_llm/CLR_APPLY_RESULT.md。
+
+
+## 16. SGR 给 CLR 提供语义旋钮：CLR 变有效，但 SGR+CLR 仍超不过纯 dense
+
+验证用户假设（“FRSMASH/GLA 无 SGR 故 CLR 无效，加 SGR 则 CLR 有效”）。同规模四元对比（GLA, seq256/d256/L6/1000步）：
+
+| 配置 | 有SGR? | CLR控 | val ppl | 判定 |
+|------|------|--------|---------|------|
+| GLA+dense | 否 | — | ~104.3 | 基线 |
+| GLA+CLR-wd(§15) | 否 | wd | ≈dense | **CLR 无效** |
+| GLA+SGR+硬路由 | 是 | frac固定 | 116.5 | +12% |
+| GLA+SGR+CLR-frac | 是 | frac闭环 | **106.6** | **CLR 有效(+12%→2.2%)** |
+
+✅ 假设成立一半：SGR 给 CLR 提供了 frac 这个**语义旋钮**，CLR 立刻从“空转”变“有效”（把硬路由 +12% 灾难救到 +2.2%）。**CLR 有效 ⟺ 存在可被泛化信号驱动的语义旋钮。**
+❌ 但 SGR+CLR(106.6) 仍比纯 GLA+dense(104.3) 差 2.2%，且闭环自保在 frac=0.89（几乎不稀疏，无推理收益）。**“CLR 有效”只是“让 SGR 可用”，不是“打赢原骨干”**。要 SGR+CLR 净赢需更大规模（frac 能真降而不掉 ppl）。详见 experiments/exp4_arc_llm/SGR_ENABLES_CLR.md。
