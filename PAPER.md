@@ -308,3 +308,10 @@ loop 5-6 证明 hybrid 的 O(T·W) 效率优势需融合 kernel。本轮写 Trit
 GLA +2.07、**hybrid +2.47**(最会用长程)、softmax −1.51(小模型下不会用长程)。质量: GLA 107.37 ≈ hybrid 108.62(ppl 持平), 远胜 softmax 146.54。
 合并 loop7 速度: **长上下文 hybrid = GLA 质量 + 比 softmax 快近 8×**。hybrid 对 GLA 的质量优势在长上下文消失(持平), 但对 softmax 的优势(质量+速度)在长上下文最大。
 **完整 NIAH/LongBench 需更大+指令微调模型, 超单卡 4090 算力, 列 future work**; Δppl 是可行的长程代理度量。详见 experiments/exp4_arc_llm/NARRATIVE_LOOP8.md。
+
+
+## 24. Loop 9: hybrid 注意力嫁接到 ~80M FRSMASH — 不提升(负迁移)
+
+FRSMASH-Hybrid = FRSMASHv36(d512/L8, 80M) + 局部窗口 softmax 分支(Triton O(T·W), 嫁接 loop4-8 成果)。FRSMASH 已有 GLA recall+SSM+SlowMemory。
+seq512/1500步: vanilla ppl **37.07** vs hybrid 36.94(−0.4%, 噪声级); 800步: 52.92 vs 52.32。速度 80k→8k tok/s(Triton 没拖慢)。
+**hybrid 分支在 FRSMASH 上冗余, 无质量提升**: FRSMASH 非纯 GLA, SSM+SlowMemory 已覆盖短程精度, 局部 softmax 重复造轮子。印证 loop4-8 边界: hybrid=纯线性注意力的短程补丁, 只对短程弱的架构(纯GLA)有用, 对短程强的(FRSMASH)无效。loop7 Triton kernel 工程在真模型上成立(没拖慢), 但那是工程非质量。FRSMASH 本身(ppl 37)仍是最强真模型。详见 experiments/exp5_frsmash_hybrid/。
