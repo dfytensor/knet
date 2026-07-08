@@ -40,8 +40,7 @@ def vppl(model, loader):
 
 def run(name, model, steps=200, seq=4096, micro_bs=2, grad_accum=4, lr=5e-4, wd=0.01):
     val_c,tr_c=make_streams(seq)
-    # trunc val: 末 1024 做长程度量
-    TRUNC=1024
+    TRUNC=seq//4  # 截断 = seq 的 1/4, 做 Δppl 长程度量
     val_trc=[c[-(TRUNC+1):] for c in val_c]
     vlf=DataLoader(DS(val_c),batch_size=2,shuffle=False,collate_fn=DS.collate)
     vlt=DataLoader(DS(val_trc),batch_size=2,shuffle=False,collate_fn=DS.collate)
